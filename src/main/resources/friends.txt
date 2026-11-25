@@ -1,0 +1,4 @@
+first_name, last_name, date_of_birth, email
+Alice, Johnson, 1992-02-29, alice.johnson@example.com
+Bob, Smith, 1988-11-25, bob.smith@example.com
+Charlie, Brown, 1995-07-14, charlie.brown@example.com
