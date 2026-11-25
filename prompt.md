@@ -39,9 +39,12 @@ Generated the Spring Boot console application scaffold for `birthday-scheduler` 
 
 ### Prompt #2:
 
-Generated the SQLite schema and initial seed data under `src/main/resources/` following Spring Boot's SQL initialization convention (`schema.sql` and `data.sql`):
+generate the schema and 3 entries (sql init) for sqlite, matching the requirements for friends: first_name, last_name, date_of_birth, email
 
 ### Response #2:
+
+Generated the SQLite schema and initial seed data under `src/main/resources/` following Spring Boot's SQL initialization convention (`schema.sql` and `data.sql`):
+
 
 - [schema.sql](file:///Users/carlospupo/Desktop/test/src/main/resources/schema.sql): Defines `CREATE TABLE IF NOT EXISTS friends` with `id` (`INTEGER PRIMARY KEY AUTOINCREMENT`), `first_name`, `last_name`, `date_of_birth` (`TEXT`, ISO-8601 `YYYY-MM-DD`), and `email` (`TEXT NOT NULL UNIQUE`).
 - [data.sql](file:///Users/carlospupo/Desktop/test/src/main/resources/data.sql): Inserts 3 sample friends (`Alice Johnson`, `Bob Smith`, `Clara Martinez`) using `INSERT OR IGNORE` so repeated SQL init runs remain idempotent.
