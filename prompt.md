@@ -398,3 +398,67 @@ I reviewed your CSV reader changes in commit `231c0a63` (`csv support.`) and fou
 Ran `./gradlew test --rerun-tasks` after the final edits: all **70 tests across 18 test suites passed** (0 failures, 0 errors, 0 skipped).
 
 ---
+
+### Prompt #8:
+
+now lets complete the README.md file, add:
+1- very short explanation about this app (1-2 lines)
+2- assumptions (csv format, job tracking always in sqlite despite the friends source, etc)
+3- requirements (java version, docker, etc)
+4- how to build the app
+5- how to run it, here include all the possible ways (manually executing the jar, using jib, docker, docker-compose)
+
+### Response #8:
+
+Updated [README.md](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/README.md) with:
+
+1. **Overview**: Short summary of the birthday greeting and reminder scheduler.
+2. **Assumptions**: `app.friends.source` (`sqlite` default vs `file`), CSV schema (`first_name`, `last_name`, `date_of_birth`, `email`, optional `phone_number`), SQLite-backed `birthday_job_runs` history regardless of friend source, Feb 29 handling in non-leap years, notification channel defaults, and `--list` / scheduled execution behavior.
+3. **Requirements**: Java 21 (with `./gradlew` wrapper), Docker / Docker Compose (optional), SMTP server for email, and Twilio credentials if SMS is enabled.
+4. **Build**: `./gradlew test bootJar`, `./gradlew jibDockerBuild`, and `docker build`.
+5. **Run**: Instructions for executing the JAR manually (`java -jar` and `./gradlew bootRun`), Jib (`jibDockerBuild` / `jib` + `docker run`), Docker (`Dockerfile`), and Docker Compose ([compose.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/compose.yml)), along with an environment variable reference table matching [application.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/application.yml).
+
+---
+
+### Prompt #9:
+
+you need to include an extra param available in the cli: "list", remember from java execution you need to pass it as "--list", include this as well an a versy short explanation
+
+### Response #9:
+
+Updated [README.md](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/README.md#L41-L45) to document the `--list` CLI parameter prominently:
+
+- Added a **CLI Parameters** subsection under **Run** explaining `--list` (pass as `--list` when executing from Java; prints all friends loaded from the configured source and exits immediately without sending notifications or keeping the scheduler running).
+- Added the `docker compose run --rm birthday-scheduler --list` command alongside the existing `java -jar`, `./gradlew bootRun`, and `docker run` `--list` examples.
+
+### Prompt #10:
+
+last thing, run a quick review, acting as an evaluator reviewing this solution, any observations you have share it here, no code changes at this moment
+
+### Reponse #10:
+
+Here is an evaluator review of the current solution based on the codebase and test suite.
+
+### Overall Assessment
+The solution is clean, modular, well-tested, and meets the functional requirements (SQLite and CSV friend sources, SQLite-backed daily job tracking, Feb 29 leap-year handling, Email + Twilio SMS channels, `--list` CLI mode, Docker/Jib/Compose packaging, and documentation).
+
+### What Works Well
+- **Clean separation of concerns**: Domain logic ([Friend.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/domain/Friend.java)), repository selection ([FriendRepositoryConfiguration.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/FriendRepositoryConfiguration.java)), templating ([MessageTemplateService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/MessageTemplateService.java)), and channel delivery ([BaseNotificationChannel.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BaseNotificationChannel.java), [NotificationDispatcher.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/NotificationDispatcher.java)) are cleanly decoupled and easy to extend.
+- **CSV parsing & validation**: [CsvFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/CsvFriendRepository.java) uses Apache Commons CSV directly, handles optional/omitted `phone_number`, BOMs, surrounding whitespace, quoted fields, and missing/invalid required fields, while assigning unique 1-based IDs so self-exclusion in [BirthdayReminderService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayReminderService.java#L73-L78) works properly.
+- **Channel & config safety**: [TwilioSdkSmsGateway.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/TwilioSdkSmsGateway.java#L16-L20) fails fast at startup if SMS is enabled without credentials, and channel delivery errors are isolated per recipient rather than aborting the whole batch.
+- **Test coverage**: All 70 tests across 18 test suites pass, covering unit, configuration (`ApplicationContextRunner`), and `@SpringBootTest` integration scenarios for both `sqlite` and `file` sources.
+
+### Observations & Potential Improvements
+1. **`spring.sql.init.mode: always` seeds `data.sql` unconditionally**:
+   - In [application.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/application.yml#L12-L14), `schema.sql` and [data.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/data.sql) run on every startup even when `app.friends.source=file`. If someone intentionally deletes or edits seeded rows in SQLite, `data.sql` (`INSERT OR IGNORE`) re-inserts the 3 sample rows on restart. Splitting schema creation from demo seed data (e.g., via a dev profile or property) would make production SQLite usage cleaner.
+2. **Delivery failure vs. `birthday_job_runs` idempotency**:
+   - [EmailNotificationChannel.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/EmailNotificationChannel.java#L48-L50) and [TwilioSmsNotificationChannel.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/TwilioSmsNotificationChannel.java#L42-L44) catch and log `MailException` / `TwilioException`, so [BirthdaySchedulerService.processBirthdays](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdaySchedulerService.java#L45-L48) still calls `jobRunRepository.markAsRun(...)`. That prevents duplicate sends to successful recipients, but also prevents automatic retry for failed recipients if the SMTP/Twilio outage was transient.
+3. **Container timezone for midnight cron**:
+   - [BirthdaySchedulerApplication.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/BirthdaySchedulerApplication.java#L21-L24) uses `Clock.systemDefaultZone()`. Inside `eclipse-temurin:21-jre` ([Dockerfile](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/Dockerfile#L13)), the default zone is `UTC` unless `TZ` is set, which can shift when `0 0 0 * * *` evaluates birthdays relative to local time.
+4. **CSV vs. SQLite validation parity**:
+   - [CsvFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/CsvFriendRepository.java) wraps `DateTimeParseException` with record context, whereas [SqliteFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/SqliteFriendRepository.java#L32-L40) calls `LocalDate.parse` directly without row context. Also, CSV records allow duplicate emails (unlike `schema.sql`'s `UNIQUE` constraint on `email`), and neither validates email syntax beyond non-blank.
+5. **Minor repo & hygiene items**:
+   - [FriendRepositoryIntegrationTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/repositories/FriendRepositoryIntegrationTest.java#L81-L90) still has a commented-out `//@Test` (`sendsBirthdayEmailForFeb29FriendOnFeb28EndToEnd`) left over from before [CsvFriendSourceIntegrationTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/repositories/CsvFriendSourceIntegrationTest.java) was added.
+   - [EmailNotificationChannel.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/EmailNotificationChannel.java#L49) has a small typo in the log message (`"exeption: {}"`).
+   - [compose.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/compose.yml#L9-L23) doesn't pass `APP_FRIENDS_SOURCE` / `APP_FRIENDS_FILE` in `environment:` (unlike the other `APP_*` variables), and [birthday-reminder-email.ftl](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/templates/birthday-reminder-email.ftl#L3) uses the classic kata wording `"Don't forget to send him a message !"`.
+   - `dev.db` is currently tracked/present in the repo root (`.dockerignore` excludes `*.db`, though `.gitignore` does not).
