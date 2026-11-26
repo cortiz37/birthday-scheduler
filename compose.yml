@@ -1,0 +1,28 @@
+services:
+  birthday-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: birthday-scheduler:1.0.0
+    container_name: birthday-scheduler
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:sqlite:/app/data/birthday-scheduler.db
+      SMTP_HOST: ${SMTP_HOST:-localhost}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_AUTH: ${SMTP_AUTH:-false}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-false}
+      APP_MAIL_FROM: ${APP_MAIL_FROM:-myaccount@server.com}
+      APP_NOTIFICATIONS_EMAIL_ENABLED: ${APP_NOTIFICATIONS_EMAIL_ENABLED:-true}
+      APP_NOTIFICATIONS_SMS_ENABLED: ${APP_NOTIFICATIONS_SMS_ENABLED:-false}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      APP_BIRTHDAY_SCHEDULER_CRON: ${APP_BIRTHDAY_SCHEDULER_CRON:-0 0 0 * * *}
+    volumes:
+      - birthday-data:/app/data
+
+volumes:
+  birthday-data:

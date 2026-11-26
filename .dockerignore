@@ -1,0 +1,12 @@
+.git/
+.gradle/
+.idea/
+build/
+out/
+data/
+*.db
+*.sqlite
+*.sqlite3
+*.log
+.DS_Store
+prompt.md

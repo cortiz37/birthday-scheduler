@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.7'
+    id 'com.google.cloud.tools.jib' version '3.5.4'
 }
 
 group = 'com.jobsity'
@@ -35,4 +36,27 @@ tasks.named('test') {
 
 tasks.named('bootRun') {
     standardInput = System.in
+}
+
+jib {
+    from {
+        image = 'eclipse-temurin:21-jre'
+        platforms {
+            platform {
+                architecture = findProperty('jibArch') ?: (System.getProperty('os.arch') == 'aarch64' ? 'arm64' : 'amd64')
+                os = 'linux'
+            }
+        }
+    }
+    to {
+        image = findProperty('jibImage') ?: "${project.name}:${project.version}"
+    }
+    container {
+        mainClass = 'com.jobsity.birthdayscheduler.BirthdaySchedulerApplication'
+        workingDirectory = '/app/data'
+        environment = [
+            'SPRING_DATASOURCE_URL': 'jdbc:sqlite:/app/data/birthday-scheduler.db'
+        ]
+        creationTime = 'USE_CURRENT_TIMESTAMP'
+    }
 }
