@@ -2,6 +2,7 @@ package com.jobsity.birthdayscheduler.services;
 
 import com.jobsity.birthdayscheduler.repositories.BirthdayJobRunRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
@@ -18,6 +19,7 @@ import java.time.LocalDate;
 import java.time.ZoneOffset;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -47,13 +49,23 @@ class BirthdaySchedulerServiceIntegrationTest {
 
     @Test
     void startupRunnerMarksDayProcessedSoSubsequentScheduledTriggerDoesNotResend() {
-        // BirthdaySchedulerCliRunner already ran on startup for 2026-03-15
+        // BirthdaySchedulerCliRunner already ran on startup for 2026-03-15 (1 notification + 2 reminders)
         assertThat(jobRunRepository.hasRunOn(LocalDate.of(2026, 3, 15))).isTrue();
-        verify(javaMailSender, times(1)).send(any(SimpleMailMessage.class));
+        ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(javaMailSender, times(3)).send(captor.capture());
+
+        assertThat(captor.getAllValues()).extracting(
+                msg -> msg.getTo()[0],
+                SimpleMailMessage::getSubject
+        ).containsExactlyInAnyOrder(
+                tuple("alice.johnson@example.com", "Happy birthday!"),
+                tuple("bob.smith@example.com", "Birthday Reminder"),
+                tuple("clara.martinez@example.com", "Birthday Reminder")
+        );
 
         // Scheduled trigger later on the same day must skip sending again
         schedulerService.processScheduledBirthdays();
 
-        verify(javaMailSender, times(1)).send(any(SimpleMailMessage.class));
+        verify(javaMailSender, times(3)).send(any(SimpleMailMessage.class));
     }
 }

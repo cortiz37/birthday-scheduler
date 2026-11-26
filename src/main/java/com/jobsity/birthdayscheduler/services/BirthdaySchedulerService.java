@@ -16,13 +16,16 @@ public class BirthdaySchedulerService {
     private static final Logger log = LoggerFactory.getLogger(BirthdaySchedulerService.class);
 
     private final BirthdayNotificationService notificationService;
+    private final BirthdayReminderService reminderService;
     private final BirthdayJobRunRepository jobRunRepository;
     private final Clock clock;
 
     public BirthdaySchedulerService(BirthdayNotificationService notificationService,
+                                    BirthdayReminderService reminderService,
                                     BirthdayJobRunRepository jobRunRepository,
                                     Clock clock) {
         this.notificationService = notificationService;
+        this.reminderService = reminderService;
         this.jobRunRepository = jobRunRepository;
         this.clock = clock;
     }
@@ -32,11 +35,6 @@ public class BirthdaySchedulerService {
         processBirthdays();
     }
 
-    /**
-     * Runs the birthday notification job for today's date if it has not already run today.
-     *
-     * @return {@code true} if the job executed for today, {@code false} if today was already processed
-     */
     public synchronized boolean processBirthdays() {
         LocalDate targetDate = LocalDate.now(clock);
         if (jobRunRepository.hasRunOn(targetDate)) {
@@ -45,6 +43,7 @@ public class BirthdaySchedulerService {
         }
 
         notificationService.sendBirthdayEmails(targetDate);
+        reminderService.sendBirthdayReminders(targetDate);
         jobRunRepository.markAsRun(targetDate, Instant.now(clock));
         log.info("Birthday job completed for {}.", targetDate);
         return true;

@@ -32,6 +32,8 @@ app:
     from: ${APP_MAIL_FROM:myaccount@server.com}
     template-birthday-subject: "Happy birthday!"
     template-birthday: birthday-email.ftl
+    template-birthday-reminder-subject: "Birthday Reminder"
+    template-birthday-reminder: birthday-reminder-email.ftl
   birthday-scheduler:
     schedule:
       cron: "${APP_BIRTHDAY_SCHEDULER_CRON:0 0 0 * * *}"

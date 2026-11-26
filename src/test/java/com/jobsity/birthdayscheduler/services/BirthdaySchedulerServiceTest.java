@@ -29,6 +29,9 @@ class BirthdaySchedulerServiceTest {
     @Mock
     private BirthdayNotificationService notificationService;
 
+    @Mock
+    private BirthdayReminderService reminderService;
+
     private Clock mutableClock;
     private Instant currentInstant;
     private Set<LocalDate> recordedDates;
@@ -68,7 +71,7 @@ class BirthdaySchedulerServiceTest {
             }
         };
 
-        schedulerService = new BirthdaySchedulerService(notificationService, jobRunRepository, mutableClock);
+        schedulerService = new BirthdaySchedulerService(notificationService, reminderService, jobRunRepository, mutableClock);
     }
 
     @Test
@@ -77,16 +80,19 @@ class BirthdaySchedulerServiceTest {
         boolean firstRun = schedulerService.processBirthdays();
         assertThat(firstRun).isTrue();
         verify(notificationService, times(1)).sendBirthdayEmails(LocalDate.of(2026, 11, 25));
+        verify(reminderService, times(1)).sendBirthdayReminders(LocalDate.of(2026, 11, 25));
 
         // 2nd entry point: scheduler triggers later the same day
         currentInstant = Instant.parse("2026-11-25T23:59:00Z");
         schedulerService.processScheduledBirthdays();
         verify(notificationService, times(1)).sendBirthdayEmails(LocalDate.of(2026, 11, 25));
+        verify(reminderService, times(1)).sendBirthdayReminders(LocalDate.of(2026, 11, 25));
 
         // Next day: scheduler triggers on 2026-11-26
         currentInstant = Instant.parse("2026-11-26T00:00:00Z");
         schedulerService.processScheduledBirthdays();
         verify(notificationService, times(1)).sendBirthdayEmails(LocalDate.of(2026, 11, 26));
+        verify(reminderService, times(1)).sendBirthdayReminders(LocalDate.of(2026, 11, 26));
     }
 
     @Test
@@ -96,7 +102,21 @@ class BirthdaySchedulerServiceTest {
         doThrow(new IllegalStateException("template failure"))
                 .when(notificationService).sendBirthdayEmails(LocalDate.of(2026, 11, 25));
 
-        BirthdaySchedulerService service = new BirthdaySchedulerService(notificationService, mockRepo, mutableClock);
+        BirthdaySchedulerService service = new BirthdaySchedulerService(notificationService, reminderService, mockRepo, mutableClock);
+
+        assertThatThrownBy(service::processBirthdays)
+                .isInstanceOf(IllegalStateException.class);
+        verify(mockRepo, never()).markAsRun(any(), any());
+    }
+
+    @Test
+    void doesNotMarkDayAsRunWhenReminderServiceFails() {
+        BirthdayJobRunRepository mockRepo = org.mockito.Mockito.mock(BirthdayJobRunRepository.class);
+        when(mockRepo.hasRunOn(LocalDate.of(2026, 11, 25))).thenReturn(false);
+        doThrow(new IllegalStateException("reminder template failure"))
+                .when(reminderService).sendBirthdayReminders(LocalDate.of(2026, 11, 25));
+
+        BirthdaySchedulerService service = new BirthdaySchedulerService(notificationService, reminderService, mockRepo, mutableClock);
 
         assertThatThrownBy(service::processBirthdays)
                 .isInstanceOf(IllegalStateException.class);
