@@ -9,7 +9,7 @@ A Spring Boot application that sends daily birthday greetings to friends celebra
 - **Job execution history**: Daily run tracking (`birthday_job_runs` table) is always persisted in SQLite (`spring.datasource.url`), even when `app.friends.source=file`, so restarts or repeated scheduled triggers on the same day do not resend notifications.
 - **Leap-year birthdays**: Friends born on February 29 are celebrated on February 28 in non-leap years.
 - **Notification channels**: Email is enabled by default (`app.notifications.email.enabled=true`) and Twilio SMS is disabled by default (`app.notifications.sms.enabled=false`). Enabling SMS requires valid Twilio credentials; friends missing an email address or phone number are skipped on that channel.
-- **CLI & scheduling behavior**: Starting without `--list` processes today's birthdays once (if not already recorded in SQLite) and keeps the scheduler alive (`0 0 0 * * *` by default). Passing `--list` prints all loaded friends and exits.
+- **CLI & scheduling behavior**: Starting without `--list` processes today's birthdays once (if not already recorded in SQLite) and keeps the scheduler alive (`0 0 8 * * *` by default). Passing `--list` prints all loaded friends and exits.
 
 ## Requirements
 
@@ -128,7 +128,7 @@ docker compose down
 | `APP_FRIENDS_SOURCE` | `sqlite` | Friends datasource: `sqlite` or `file` |
 | `APP_FRIENDS_FILE` | `classpath:friends.txt` | Resource or filesystem path to CSV when `APP_FRIENDS_SOURCE=file` |
 | `SPRING_DATASOURCE_URL` | `jdbc:sqlite:dev.db` | SQLite JDBC URL (set to `jdbc:sqlite:/app/data/birthday-scheduler.db` in containers) |
-| `APP_BIRTHDAY_SCHEDULER_CRON` | `0 0 0 * * *` | Spring cron expression for daily birthday checks |
+| `APP_BIRTHDAY_SCHEDULER_CRON` | `0 0 8 * * *` | Spring cron expression for daily birthday checks |
 | `APP_NOTIFICATIONS_EMAIL_ENABLED` | `true` | Enable/disable email channel |
 | `SMTP_HOST` / `SMTP_PORT` | `localhost` / `1025` | SMTP server host and port |
 | `SMTP_USERNAME` / `SMTP_PASSWORD` | _(empty)_ | SMTP credentials |
