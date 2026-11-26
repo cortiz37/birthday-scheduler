@@ -46,7 +46,7 @@ public class EmailNotificationChannel extends BaseNotificationChannel {
             mail.setText(message.body());
             mailSender.send(mail);
         } catch (MailException ex) {
-            log.error("Failed to send email to {}, subject ({})", message.recipient(), message.subject(), ex);
+            log.error("Failed to send email to {}, subject ({}), exeption: {}", message.recipient(), message.subject(), ex.getMessage());
         }
     }
 }
