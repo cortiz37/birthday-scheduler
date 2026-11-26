@@ -7,3 +7,8 @@ CREATE TABLE IF NOT EXISTS friends (
 );
 
 CREATE INDEX IF NOT EXISTS idx_friends_dob ON friends(date_of_birth);
+
+CREATE TABLE IF NOT EXISTS birthday_job_runs (
+    run_date TEXT PRIMARY KEY,
+    executed_at TEXT NOT NULL
+);

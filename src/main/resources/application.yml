@@ -5,7 +5,7 @@ spring:
     web-application-type: none
     banner-mode: off
   datasource:
-    url: "jdbc:sqlite::memory:"
+    url: "jdbc:sqlite:dev.db"
     driver-class-name: org.sqlite.JDBC
     hikari:
       maximum-pool-size: 1
@@ -34,4 +34,4 @@ app:
     template-birthday: birthday-email.ftl
   birthday-scheduler:
     schedule:
-      cron: "-"
+      cron: "${APP_BIRTHDAY_SCHEDULER_CRON:0 0 0 * * *}"
