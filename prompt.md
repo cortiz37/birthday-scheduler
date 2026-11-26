@@ -1,6 +1,6 @@
 ### Prompt #1:
 
-Generated the Spring Boot console application scaffold for `birthday-scheduler` with Java 21, Gradle, and YAML configuration, without business logic or web/API controllers.
+generate a SpringBoot console application scaffold for a `birthday-scheduler` with Java 21, Gradle, and YAML configuration, without business logic or web/API controllers. This is to schedule notifications and reminders.
 
 ### Response #1:
 
