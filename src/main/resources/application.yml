@@ -45,4 +45,4 @@ app:
     from-number: ${TWILIO_FROM_NUMBER:}
   birthday-scheduler:
     schedule:
-      cron: "${APP_BIRTHDAY_SCHEDULER_CRON:0 0 0 * * *}"
+      cron: "${APP_BIRTHDAY_SCHEDULER_CRON:0 0 8 * * *}"
