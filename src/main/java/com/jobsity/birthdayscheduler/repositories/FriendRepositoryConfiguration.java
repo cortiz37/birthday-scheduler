@@ -17,9 +17,23 @@ public class FriendRepositoryConfiguration {
                                              @Value("${app.friends.file-location:classpath:friends.txt}") String fileLocation) {
 
         return switch (source) {
-            case "sqlite" -> new SqliteFriendRepository(jdbcClientProvider.getObject());
+            case "sqlite" -> {
+                JdbcClient jdbcClient = jdbcClientProvider.getObject();
+                ensurePhoneNumberColumn(jdbcClient);
+                yield new SqliteFriendRepository(jdbcClient);
+            }
             case "file" -> throw new UnsupportedOperationException("Unsupported file source");
             default -> throw new IllegalArgumentException("Unsupported source '" + source);
         };
+    }
+
+    static void ensurePhoneNumberColumn(JdbcClient jdbcClient) {
+        boolean hasPhoneNumber = jdbcClient.sql("PRAGMA table_info(friends)")
+                .query((rs, rowNum) -> rs.getString("name"))
+                .list()
+                .contains("phone_number");
+        if (!hasPhoneNumber) {
+            jdbcClient.sql("ALTER TABLE friends ADD COLUMN phone_number TEXT").update();
+        }
     }
 }

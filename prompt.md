@@ -173,3 +173,202 @@ Updated `Friend.isBirthdayOn` and its unit tests for February 29 birthdays:
 
 ---
 
+### Prompt #6:
+
+check current implementation for email notifications, we need to refactor this in order to reuse existing components to be able to send an sms notification + email. Use a know lib for twilio as a
+provider. We should have a config to decide if we want to enable email and/or sms. Present an implementation plan first before touching current working code
+
+### Response #6:
+
+### Current Implementation Review
+
+Right now, email delivery is tightly coupled to template rendering and domain services:
+
+1. **Templating + Delivery are coupled** in [MessageTemplateService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/MessageTemplateService.java):
+   - It mixes FreeMarker template rendering (`renderTemplate`) with SMTP sending (`JavaMailSender`, `fromAddress`, `SimpleMailMessage`, `EmailMessage`).
+   - Both [BirthdayNotificationService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayNotificationService.java) and [BirthdayReminderService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayReminderService.java) call `sendTemplatedEmail(...)` directly, and both also expose secondary constructors taking `JavaMailSender` directly.
+2. **Domain & persistence lack phone numbers**:
+   - [Friend.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/domain/Friend.java) only holds `(id, firstName, lastName, dateOfBirth, email)`.
+   - [schema.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/schema.sql), [data.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/data.sql), and [SqliteFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/SqliteFriendRepository.java) have no `phone_number` column.
+3. **Email-specific naming & no channel toggles**:
+   - [EmailMessage.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/domain/EmailMessage.java), `BirthdayNotificationService.sendBirthdayEmails`, and [BirthdaySchedulerCliRunner.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/cli/BirthdaySchedulerCliRunner.java) assume email is the only channel, and [application.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/application.yml) has no email/SMS enablement flags.
+
+---
+
+### Implementation Plan
+
+#### 1. Add Twilio Dependency
+- Update [build.gradle](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/build.gradle) to add the official Twilio Java SDK (`com.twilio.sdk:twilio`).
+
+#### 2. Extend Domain, Schema, and Repository for Phone Numbers
+- **[Friend.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/domain/Friend.java)**: Add `String phoneNumber` (nullable/optional so friends without a phone number still receive email, and vice versa).
+- **[schema.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/schema.sql) & [data.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/data.sql)**: Add `phone_number TEXT` to `friends` and seed sample E.164 phone numbers (e.g., `+15550000001`). Note: because `CREATE TABLE IF NOT EXISTS` does not alter an existing `dev.db`, we will either recreate `dev.db` or add an idempotent migration/column handling note.
+- **[SqliteFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/SqliteFriendRepository.java)**: Update `SELECT_ALL_SQL` and `mapRow` to read `phone_number`.
+- **[BirthdaySchedulerCliRunner.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/cli/BirthdaySchedulerCliRunner.java)**: Update `--list` output to display phone number alongside email, and generalize `"Birthday emails processed..."` log/output messages to `"Birthday notifications processed..."`.
+
+#### 3. Add Channel Toggle & Twilio Configuration
+- Update [application.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/application.yml) (and [application-test.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/resources/application-test.yml) if needed):
+  ```yaml
+  app:
+    notifications:
+      email:
+        enabled: ${APP_NOTIFICATIONS_EMAIL_ENABLED:true}
+      sms:
+        enabled: ${APP_NOTIFICATIONS_SMS_ENABLED:false}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_FROM_NUMBER:}
+  ```
+- Create `@ConfigurationProperties` classes (or bind properties cleanly) for notification channel flags and Twilio settings.
+
+#### 4. Refactor Templating & Introduce Channel Abstraction
+Decouple *what* is rendered from *how* it is delivered so existing FreeMarker templates and services are reused:
+- **Refactor [MessageTemplateService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/MessageTemplateService.java)**:
+  - Remove `JavaMailSender` and `fromAddress` dependencies.
+  - Focus it purely on rendering FreeMarker templates: `String render(String templateName, Map<String, Object> model)` (preserving the `IllegalStateException` on missing template/variable).
+- **Replace/generalize `EmailMessage`** (or introduce `NotificationMessage(Friend recipient, String subject, String body)` in `domain/`).
+- **Create a `NotificationChannel` interface** (e.g., in `services/`):
+  - `void send(NotificationMessage message)` (or `send(Friend recipient, String subject, String body)`).
+- **Implement `EmailNotificationChannel`** (`@Service` / `@Component` with `@ConditionalOnProperty(prefix = "app.notifications.email", name = "enabled", havingValue = "true", matchIfMissing = true)`):
+  - Holds `JavaMailSender` and `app.mail.from`.
+  - Skips with a warning if `recipient.email()` is null/blank.
+  - Sends `SimpleMailMessage` and catches/logs `MailException` (preserving current resilience so one failure doesn't abort remaining recipients).
+- **Implement `TwilioSmsGateway` + `TwilioSmsNotificationChannel`** (`@ConditionalOnProperty(prefix = "app.notifications.sms", name = "enabled", havingValue = "true")`):
+  - Wrap Twilio's static `Twilio.init(...)` and `Message.creator(to, from, body).create()` behind a thin `TwilioSmsGateway` bean/interface so the channel is unit-testable with standard Mockito without static mocking.
+  - Validate `accountSid`, `authToken`, and `fromNumber` when SMS is enabled (fail fast on startup if SMS is enabled with missing credentials).
+  - Skips with a warning if `recipient.phoneNumber()` is null/blank.
+  - Catches/logs Twilio `ApiException` / `TwilioException` so failures don't stop remaining recipients or email delivery.
+- **Create a `NotificationDispatcher` (or inject `List<NotificationChannel>`)**:
+  - Renders the template once via `MessageTemplateService` and iterates over all active `NotificationChannel` beans.
+  - Logs a clear warning if no channels are enabled (`email.enabled=false` and `sms.enabled=false`).
+
+#### 5. Update `BirthdayNotificationService`, `BirthdayReminderService`, and `BirthdaySchedulerService`
+- **[BirthdayNotificationService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayNotificationService.java)**:
+  - Depend on `FriendRepository`, `MessageTemplateService`, and `List<NotificationChannel>` (or `NotificationDispatcher`).
+  - Rename `sendBirthdayEmails(LocalDate)` to `sendBirthdayNotifications(LocalDate)` (or keep a delegating alias if preferred) and dispatch rendered messages across all enabled channels.
+- **[BirthdayReminderService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayReminderService.java)**:
+  - Reuse the same `MessageTemplateService` + `List<NotificationChannel>` (or `NotificationDispatcher`) so reminders also go out via enabled channels.
+- **[BirthdaySchedulerService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdaySchedulerService.java)**:
+  - Call the updated notification method.
+
+#### 6. Update & Add Tests
+- Update existing unit & integration tests ([FriendTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/domain/FriendTest.java), [MessageTemplateServiceTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/services/MessageTemplateServiceTest.java), [BirthdayNotificationServiceTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/services/BirthdayNotificationServiceTest.java), [BirthdayReminderServiceTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/services/BirthdayReminderServiceTest.java), [BirthdaySchedulerServiceTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/services/BirthdaySchedulerServiceTest.java), [BirthdaySchedulerServiceIntegrationTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/services/BirthdaySchedulerServiceIntegrationTest.java), [BirthdayNotificationServiceIntegrationTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/services/BirthdayNotificationServiceIntegrationTest.java), [BirthdaySchedulerCliRunnerTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/cli/BirthdaySchedulerCliRunnerTest.java)) for the new `Friend` field and refactored services.
+- Add new unit tests for:
+  - `EmailNotificationChannel` (sending, missing email skipped, `MailException` logged/swallowed).
+  - `TwilioSmsNotificationChannel` (sending via mocked `TwilioSmsGateway`, missing phone number skipped, Twilio exception logged/swallowed).
+  - `NotificationDispatcher` (fan-out to email only, SMS only, both email + SMS, or neither).
+- Add Spring context tests verifying `@ConditionalOnProperty` behavior for all 4 combinations (`email` on/off, `sms` on/off).
+- Run `./gradlew test` to verify the full suite passes.
+
+---
+
+### Decisions to Confirm Before Starting
+
+1. **Scope of SMS**: Should **both** birthday greetings (`BirthdayNotificationService`) and friend reminders (`BirthdayReminderService`) be sent via SMS when enabled, or only birthday greetings?
+2. **Templates**: Are you happy reusing [birthday-email.ftl](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/templates/birthday-email.ftl) (`"Happy birthday, dear ${firstName}!"`) and [birthday-reminder-email.ftl](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/templates/birthday-reminder-email.ftl) for SMS too, or do you want separate SMS template properties?
+3. **Existing `dev.db`**: Since `dev.db` already exists in the workspace, are you okay with recreating it (or adding an `ALTER TABLE` startup check) when adding `phone_number`?
+
+Once you confirm these points (or approve the plan as-is), I'll begin implementing it.
+
+---
+
+### plan analysis, answering decision points:
+- 1: yes, we need both notifications as well
+- 2: keep the same template for now (since adding a new one will be simple)
+- 3: yes do the ALTER to add `phone_number`.
+  
+Additional notes: 
+
+- 1: even if we have `sms.enabled=true` we need to check if we have a phone number before trying to send the sms (null/blank) will be skipped
+- 2: check the implementation plan, remember we have the entity model `EmailMessage` we can reuse the same for sms (except `subject` attr). Include in the implementation plan a refactor for this class to be just `Message` and we cna reuse it for email and sms logic
+
+After submitting the answers:
+
+### Response #6 (updated implementation plan):
+
+Here is the updated implementation plan incorporating your decisions and notes (still without modifying any working code):
+
+---
+
+### Updated Implementation Plan
+
+#### 1. Dependencies ([build.gradle](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/build.gradle))
+- Add the official Twilio Java Helper Library:
+  - `implementation 'com.twilio.sdk:twilio:13.2.1'`
+
+#### 2. Domain Model Refactoring
+- **Refactor [EmailMessage.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/domain/EmailMessage.java) → `Message.java`**:
+  - Rename `EmailMessage` to `Message(String recipient, String subject, String body)` so it serves both email and SMS.
+  - Add a convenience constructor `public Message(String recipient, String body)` that sets `subject = null` for SMS (and other subjectless channels).
+- **Update [Friend.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/domain/Friend.java)**:
+  - Add `String phoneNumber` (nullable/optional) to the `Friend` record:
+    `Friend(Long id, String firstName, String lastName, LocalDate dateOfBirth, String email, String phoneNumber)`.
+
+#### 3. Database Schema, `dev.db` Migration, and Repository
+- **Update [schema.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/schema.sql)**:
+  - Include `phone_number TEXT` in `CREATE TABLE IF NOT EXISTS friends (...)` for fresh databases (including `:memory:` in tests).
+  - Because SQLite does not support `ADD COLUMN IF NOT EXISTS` and `spring.sql.init.mode: always` runs `schema.sql` on every startup, handle the existing `dev.db` cleanly by running `ALTER TABLE friends ADD COLUMN phone_number TEXT;` on `dev.db` and adding an idempotent Java schema check (`PRAGMA table_info(friends)`) that executes `ALTER TABLE friends ADD COLUMN phone_number TEXT` only if the column is missing.
+- **Update [data.sql](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/data.sql)**:
+  - Include `phone_number` values for the 3 seeded friends (`Alice`, `Bob`, `Clara`).
+- **Update [SqliteFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/SqliteFriendRepository.java)**:
+  - Update `SELECT_ALL_SQL` and `mapRow` to select and map `phone_number`.
+
+#### 4. Configuration ([application.yml](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/application.yml) & Properties)
+- Add channel enablement toggles and Twilio settings under `app`:
+  ```yaml
+  app:
+    notifications:
+      email:
+        enabled: ${APP_NOTIFICATIONS_EMAIL_ENABLED:true}
+      sms:
+        enabled: ${APP_NOTIFICATIONS_SMS_ENABLED:false}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_FROM_NUMBER:}
+  ```
+- Bind these cleanly (e.g., via `@ConfigurationProperties`), keeping email enabled by default and SMS disabled by default unless configured.
+
+#### 5. Reusable Templating & Multi-Channel Delivery Architecture
+- **Refactor [MessageTemplateService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/MessageTemplateService.java)**:
+  - Remove `JavaMailSender` and `fromAddress` from `MessageTemplateService`.
+  - Keep FreeMarker rendering as its single responsibility: `String render(String templateName, Map<String, Object> model)` (preserving `IllegalStateException` on missing templates/variables).
+  - Reuse existing templates ([birthday-email.ftl](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/templates/birthday-email.ftl) and [birthday-reminder-email.ftl](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/templates/birthday-reminder-email.ftl)) for both channels.
+- **Introduce `NotificationChannel` interface**:
+  - Defines channel delivery in terms of `Friend` + rendered content (producing a `Message`):
+    - Resolves the target recipient from `Friend` (email vs. phone number) and builds `Message` (`new Message(email, subject, body)` for email; `new Message(phoneNumber, body)` for SMS).
+    - Sends the `Message`.
+- **Implement `EmailNotificationChannel`**:
+  - Activated with `@ConditionalOnProperty(prefix = "app.notifications.email", name = "enabled", havingValue = "true", matchIfMissing = true)`.
+  - Guards against `null` / blank `friend.email()` (logs warning/debug and skips).
+  - Sends `SimpleMailMessage` via `JavaMailSender` using `Message.recipient()`, `Message.subject()`, and `Message.body()`, catching/logging `MailException` so remaining recipients and channels are unaffected.
+- **Implement `TwilioSmsGateway` + `TwilioSmsNotificationChannel`**:
+  - Activated with `@ConditionalOnProperty(prefix = "app.notifications.sms", name = "enabled", havingValue = "true")`.
+  - Validates Twilio credentials (`accountSid`, `authToken`, `fromNumber`) on startup when SMS is enabled.
+  - Wraps Twilio's static `Twilio.init(...)` and `Message.creator(to, from, body).create()` behind a thin `TwilioSmsGateway` interface/bean for clean unit testing without static mocking.
+  - **Phone number guard**: Checks `friend.phoneNumber() != null && !friend.phoneNumber().isBlank()` before building `new Message(friend.phoneNumber(), body)` and calling Twilio; if `null`/blank, logs and skips without error.
+  - Catches/logs Twilio `ApiException` / `TwilioException` so one failed SMS does not abort remaining recipients or email delivery.
+- **Create `NotificationDispatcher`** (or inject `List<NotificationChannel>`):
+  - Renders the template once via `MessageTemplateService` and dispatches to every active `NotificationChannel` bean (email only, SMS only, both, or neither with a startup/dispatch warning if empty).
+
+#### 6. Update Notification, Reminder, Scheduler, and CLI Services
+- **[BirthdayNotificationService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayNotificationService.java)** & **[BirthdayReminderService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayReminderService.java)**:
+  - Refactor both to depend on `FriendRepository`, `MessageTemplateService`, and `List<NotificationChannel>` (or `NotificationDispatcher`), so **both** birthday greetings and birthday reminders go out via all enabled channels (email and/or SMS).
+  - Update method naming where appropriate (e.g., `sendBirthdayNotifications(LocalDate)` in `BirthdayNotificationService`, keeping [BirthdaySchedulerService.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdaySchedulerService.java) in sync).
+- **[BirthdaySchedulerCliRunner.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/cli/BirthdaySchedulerCliRunner.java)**:
+  - Display `Phone` in `--list` output and generalize `"Birthday emails processed..."` messages to `"Birthday notifications processed..."`.
+
+#### 7. Tests & Verification
+- Update existing unit/integration tests for `Friend` (`phoneNumber`), `Message` (replacing `EmailMessage`), refactored `MessageTemplateService`, `BirthdayNotificationService`, `BirthdayReminderService`, `BirthdaySchedulerService`, and `BirthdaySchedulerCliRunner`.
+- Add dedicated unit tests for:
+  - `EmailNotificationChannel` (valid send, null/blank email skipped, `MailException` caught and logged).
+  - `TwilioSmsNotificationChannel` (valid send via mocked `TwilioSmsGateway` with `Message` having `subject == null`, null/blank phone number skipped, Twilio exception caught and logged).
+  - `NotificationDispatcher` / multi-channel execution (email only, SMS only, both email + SMS, neither enabled).
+  - Idempotent SQLite `phone_number` column migration against a pre-existing schema without `phone_number`.
+- Add Spring context tests verifying all 4 channel toggle combinations (`email.enabled` × `sms.enabled`).
+- Run `./gradlew test` and confirm the full suite passes.
+
+---
+
+

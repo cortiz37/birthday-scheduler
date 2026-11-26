@@ -3,7 +3,8 @@ CREATE TABLE IF NOT EXISTS friends (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     date_of_birth TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE
+    email TEXT NOT NULL UNIQUE,
+    phone_number TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_friends_dob ON friends(date_of_birth);

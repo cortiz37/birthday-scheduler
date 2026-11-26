@@ -65,7 +65,12 @@ public class BirthdaySchedulerCliRunner implements ApplicationRunner {
         }
         printStream.printf("Friends (%d):%n", friends.size());
         for (Friend friend : friends) {
-            printStream.printf("  [%d] %s | DOB: %s | Email: %s%n", friend.id(), friend.firstName() + " " + friend.lastName(), friend.dateOfBirth(), friend.email());
+            printStream.printf("  [%d] %s | DOB: %s | Email: %s | Phone: %s%n",
+                    friend.id(),
+                    friend.firstName() + " " + friend.lastName(),
+                    friend.dateOfBirth(),
+                    friend.email(),
+                    friend.phoneNumber() != null ? friend.phoneNumber() : "-");
         }
     }
 
@@ -73,9 +78,9 @@ public class BirthdaySchedulerCliRunner implements ApplicationRunner {
         LocalDate targetDate = LocalDate.now(clock);
         boolean executed = schedulerService.processBirthdays();
         if (executed) {
-            printStream.printf("Birthday emails processed for %s.%n", targetDate);
+            printStream.printf("Birthday notifications processed for %s.%n", targetDate);
         } else {
-            printStream.printf("Birthday emails already processed for %s; skipping.%n", targetDate);
+            printStream.printf("Birthday notifications already processed for %s; skipping.%n", targetDate);
         }
     }
 }

@@ -2,10 +2,8 @@ package com.jobsity.birthdayscheduler.services;
 
 import com.jobsity.birthdayscheduler.domain.Friend;
 import com.jobsity.birthdayscheduler.repositories.FriendRepository;
-import freemarker.template.Configuration;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -17,28 +15,27 @@ import java.util.Objects;
 public class BirthdayReminderService {
 
     private final FriendRepository friendRepository;
-    private final MessageTemplateService messageTemplateService;
+    private final NotificationDispatcher notificationDispatcher;
     private final String subject;
     private final String templateName;
 
     @Autowired
     public BirthdayReminderService(FriendRepository friendRepository,
-                                   MessageTemplateService messageTemplateService,
+                                   NotificationDispatcher notificationDispatcher,
                                    @Value("${app.mail.template-birthday-reminder-subject}") String subject,
                                    @Value("${app.mail.template-birthday-reminder}") String templateName) {
         this.friendRepository = friendRepository;
-        this.messageTemplateService = messageTemplateService;
+        this.notificationDispatcher = notificationDispatcher;
         this.subject = subject;
         this.templateName = templateName;
     }
 
     public BirthdayReminderService(FriendRepository friendRepository,
-                                   JavaMailSender mailSender,
-                                   Configuration freemarkerConfiguration,
-                                   String fromAddress,
+                                   MessageTemplateService messageTemplateService,
+                                   List<NotificationChannel> channels,
                                    String subject,
                                    String templateName) {
-        this(friendRepository, new MessageTemplateService(mailSender, freemarkerConfiguration, fromAddress), subject, templateName);
+        this(friendRepository, new NotificationDispatcher(messageTemplateService, channels), subject, templateName);
     }
 
     public void sendBirthdayReminders(LocalDate targetDate) {
@@ -70,7 +67,7 @@ public class BirthdayReminderService {
                 "celebratingFirstName", celebratingFriend.firstName(),
                 "celebratingLastName", celebratingFriend.lastName()
         );
-        messageTemplateService.sendTemplatedEmail(recipient.email(), subject, templateName, model);
+        notificationDispatcher.sendTemplatedNotification(recipient, subject, templateName, model);
     }
 
     private boolean isSameFriend(Friend first, Friend second) {

@@ -34,6 +34,15 @@ app:
     template-birthday: birthday-email.ftl
     template-birthday-reminder-subject: "Birthday Reminder"
     template-birthday-reminder: birthday-reminder-email.ftl
+  notifications:
+    email:
+      enabled: ${APP_NOTIFICATIONS_EMAIL_ENABLED:true}
+    sms:
+      enabled: ${APP_NOTIFICATIONS_SMS_ENABLED:false}
+  twilio:
+    account-sid: ${TWILIO_ACCOUNT_SID:}
+    auth-token: ${TWILIO_AUTH_TOKEN:}
+    from-number: ${TWILIO_FROM_NUMBER:}
   birthday-scheduler:
     schedule:
       cron: "${APP_BIRTHDAY_SCHEDULER_CRON:0 0 0 * * *}"

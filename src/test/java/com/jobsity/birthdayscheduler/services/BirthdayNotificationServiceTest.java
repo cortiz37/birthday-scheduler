@@ -34,20 +34,23 @@ class BirthdayNotificationServiceTest {
     @Mock
     private JavaMailSender mailSender;
 
-    private Configuration freemarkerConfiguration;
+    @Mock
+    private TwilioSmsGateway smsGateway;
+
+    private MessageTemplateService messageTemplateService;
     private BirthdayNotificationService service;
 
     @BeforeEach
     void setUp() {
-        freemarkerConfiguration = new Configuration(Configuration.VERSION_2_3_34);
+        Configuration freemarkerConfiguration = new Configuration(Configuration.VERSION_2_3_34);
         freemarkerConfiguration.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "/templates");
         freemarkerConfiguration.setDefaultEncoding("UTF-8");
 
+        messageTemplateService = new MessageTemplateService(freemarkerConfiguration);
         service = new BirthdayNotificationService(
                 friendRepository,
-                mailSender,
-                freemarkerConfiguration,
-                "sender@example.com",
+                messageTemplateService,
+                List.of(new EmailNotificationChannel(mailSender, "sender@example.com")),
                 "Happy birthday!",
                 "birthday-email.ftl"
         );
@@ -61,7 +64,7 @@ class BirthdayNotificationServiceTest {
         Friend oConnor = new Friend(3L, "D'Artagnan", "O'Connor", LocalDate.of(1995, 3, 15), "dartagnan@example.com");
         when(friendRepository.findAll()).thenReturn(List.of(alice, bob, oConnor));
 
-        service.sendBirthdayEmails(targetDate);
+        service.sendBirthdayNotifications(targetDate);
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(mailSender, times(2)).send(captor.capture());
@@ -77,8 +80,31 @@ class BirthdayNotificationServiceTest {
     }
 
     @Test
+    void sendsBothEmailAndSmsWhenBothChannelsEnabledAndSkipsMissingPhoneNumbers() {
+        BirthdayNotificationService multiChannelService = new BirthdayNotificationService(
+                friendRepository,
+                messageTemplateService,
+                List.of(
+                        new EmailNotificationChannel(mailSender, "sender@example.com"),
+                        new TwilioSmsNotificationChannel(smsGateway)
+                ),
+                "Happy birthday!",
+                "birthday-email.ftl"
+        );
+        LocalDate targetDate = LocalDate.of(2026, 3, 15);
+        Friend alice = new Friend(1L, "Alice", "Johnson", LocalDate.of(1992, 3, 15), "alice@example.com", "+15550000001");
+        Friend noPhone = new Friend(2L, "Clara", "Martinez", LocalDate.of(1995, 3, 15), "clara@example.com", "  ");
+        when(friendRepository.findAll()).thenReturn(List.of(alice, noPhone));
+
+        multiChannelService.sendBirthdayNotifications(targetDate);
+
+        verify(mailSender, times(2)).send(any(SimpleMailMessage.class));
+        verify(smsGateway, times(1)).sendSms("+15550000001", "Happy birthday, dear Alice!");
+    }
+
+    @Test
     void throwsWhenTargetDateIsNull() {
-        assertThatThrownBy(() -> service.sendBirthdayEmails(null))
+        assertThatThrownBy(() -> service.sendBirthdayNotifications(null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("targetDate must not be null");
     }
@@ -87,9 +113,8 @@ class BirthdayNotificationServiceTest {
     void throwsWhenTemplateDoesNotExist() {
         BirthdayNotificationService badTemplateService = new BirthdayNotificationService(
                 friendRepository,
-                mailSender,
-                freemarkerConfiguration,
-                "sender@example.com",
+                messageTemplateService,
+                List.of(new EmailNotificationChannel(mailSender, "sender@example.com")),
                 "Happy birthday!",
                 "non-existent.ftl"
         );
@@ -97,9 +122,9 @@ class BirthdayNotificationServiceTest {
         Friend alice = new Friend(1L, "Alice", "Johnson", LocalDate.of(1992, 3, 15), "alice@example.com");
         when(friendRepository.findAll()).thenReturn(List.of(alice));
 
-        assertThatThrownBy(() -> badTemplateService.sendBirthdayEmails(targetDate))
+        assertThatThrownBy(() -> badTemplateService.sendBirthdayNotifications(targetDate))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Failed to render email template 'non-existent.ftl'");
+                .hasMessageContaining("Failed to render message template 'non-existent.ftl'");
     }
 
     @Test
@@ -113,27 +138,27 @@ class BirthdayNotificationServiceTest {
                 .doNothing()
                 .when(mailSender).send(any(SimpleMailMessage.class));
 
-        service.sendBirthdayEmails(targetDate);
+        service.sendBirthdayNotifications(targetDate);
 
         verify(mailSender, times(2)).send(any(SimpleMailMessage.class));
     }
 
     @Test
-    void sendsNoEmailsWhenNoFriendsCelebrateOnTargetDate() {
+    void sendsNoNotificationsWhenNoFriendsCelebrateOnTargetDate() {
         LocalDate targetDate = LocalDate.of(2026, 1, 1);
         Friend alice = new Friend(1L, "Alice", "Johnson", LocalDate.of(1992, 3, 15), "alice@example.com");
         when(friendRepository.findAll()).thenReturn(List.of(alice));
 
-        service.sendBirthdayEmails(targetDate);
+        service.sendBirthdayNotifications(targetDate);
 
         verify(mailSender, never()).send(any(SimpleMailMessage.class));
     }
 
     @Test
-    void sendsNoEmailsWhenRepositoryIsEmpty() {
+    void sendsNoNotificationsWhenRepositoryIsEmpty() {
         when(friendRepository.findAll()).thenReturn(List.of());
 
-        service.sendBirthdayEmails(LocalDate.of(2026, 3, 15));
+        service.sendBirthdayNotifications(LocalDate.of(2026, 3, 15));
 
         verify(mailSender, never()).send(any(SimpleMailMessage.class));
     }

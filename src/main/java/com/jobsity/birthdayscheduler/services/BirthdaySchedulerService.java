@@ -42,7 +42,7 @@ public class BirthdaySchedulerService {
             return false;
         }
 
-        notificationService.sendBirthdayEmails(targetDate);
+        notificationService.sendBirthdayNotifications(targetDate);
         reminderService.sendBirthdayReminders(targetDate);
         jobRunRepository.markAsRun(targetDate, Instant.now(clock));
         log.info("Birthday job completed for {}.", targetDate);

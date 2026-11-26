@@ -8,7 +8,16 @@ public record Friend(Long id,
                      String firstName,
                      String lastName,
                      LocalDate dateOfBirth,
-                     String email) {
+                     String email,
+                     String phoneNumber) {
+
+    public Friend(Long id,
+                  String firstName,
+                  String lastName,
+                  LocalDate dateOfBirth,
+                  String email) {
+        this(id, firstName, lastName, dateOfBirth, email, null);
+    }
 
     private static final MonthDay FEB_28 = MonthDay.of(Month.FEBRUARY, 28);
     private static final MonthDay FEB_29 = MonthDay.of(Month.FEBRUARY, 29);

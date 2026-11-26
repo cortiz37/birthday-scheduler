@@ -82,19 +82,19 @@ class BirthdaySchedulerServiceTest {
         // 1st entry point: startup on 2026-11-25
         boolean firstRun = schedulerService.processBirthdays();
         assertThat(firstRun).isTrue();
-        verify(notificationService, times(1)).sendBirthdayEmails(LocalDate.of(2026, 11, 25));
+        verify(notificationService, times(1)).sendBirthdayNotifications(LocalDate.of(2026, 11, 25));
         verify(reminderService, times(1)).sendBirthdayReminders(LocalDate.of(2026, 11, 25));
 
         // 2nd entry point: scheduler triggers later the same day
         currentInstant = Instant.parse("2026-11-25T23:59:00Z");
         schedulerService.processScheduledBirthdays();
-        verify(notificationService, times(1)).sendBirthdayEmails(LocalDate.of(2026, 11, 25));
+        verify(notificationService, times(1)).sendBirthdayNotifications(LocalDate.of(2026, 11, 25));
         verify(reminderService, times(1)).sendBirthdayReminders(LocalDate.of(2026, 11, 25));
 
         // Next day: scheduler triggers on 2026-11-26
         currentInstant = Instant.parse("2026-11-26T00:00:00Z");
         schedulerService.processScheduledBirthdays();
-        verify(notificationService, times(1)).sendBirthdayEmails(LocalDate.of(2026, 11, 26));
+        verify(notificationService, times(1)).sendBirthdayNotifications(LocalDate.of(2026, 11, 26));
         verify(reminderService, times(1)).sendBirthdayReminders(LocalDate.of(2026, 11, 26));
     }
 
@@ -103,7 +103,7 @@ class BirthdaySchedulerServiceTest {
         BirthdayJobRunRepository mockRepo = org.mockito.Mockito.mock(BirthdayJobRunRepository.class);
         when(mockRepo.hasRunOn(LocalDate.of(2026, 11, 25))).thenReturn(false);
         doThrow(new IllegalStateException("template failure"))
-                .when(notificationService).sendBirthdayEmails(LocalDate.of(2026, 11, 25));
+                .when(notificationService).sendBirthdayNotifications(LocalDate.of(2026, 11, 25));
 
         BirthdaySchedulerService service = new BirthdaySchedulerService(notificationService, reminderService, mockRepo, mutableClock);
 
@@ -151,7 +151,7 @@ class BirthdaySchedulerServiceTest {
         assertThat(executed).isTrue();
         InOrder order = inOrder(mockRepo, notificationService, reminderService);
         order.verify(mockRepo).hasRunOn(today);
-        order.verify(notificationService).sendBirthdayEmails(today);
+        order.verify(notificationService).sendBirthdayNotifications(today);
         order.verify(reminderService).sendBirthdayReminders(today);
         order.verify(mockRepo).markAsRun(today, currentInstant);
     }

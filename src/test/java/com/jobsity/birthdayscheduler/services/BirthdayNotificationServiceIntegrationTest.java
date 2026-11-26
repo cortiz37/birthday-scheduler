@@ -41,7 +41,7 @@ class BirthdayNotificationServiceIntegrationTest {
 
     @Test
     void rendersFreeMarkerTemplateEndToEnd() {
-        notificationService.sendBirthdayEmails(LocalDate.of(2026, 3, 15));
+        notificationService.sendBirthdayNotifications(LocalDate.of(2026, 3, 15));
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(javaMailSender).send(captor.capture());

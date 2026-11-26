@@ -11,7 +11,7 @@ import java.util.List;
 public class SqliteFriendRepository implements FriendRepository {
 
     private static final String SELECT_ALL_SQL = """
-            SELECT id, first_name, last_name, date_of_birth, email
+            SELECT id, first_name, last_name, date_of_birth, email, phone_number
             FROM friends
             ORDER BY id
             """;
@@ -35,7 +35,8 @@ public class SqliteFriendRepository implements FriendRepository {
                 rs.getString("first_name"),
                 rs.getString("last_name"),
                 LocalDate.parse(rs.getString("date_of_birth")),
-                rs.getString("email")
+                rs.getString("email"),
+                rs.getString("phone_number")
         );
     }
 }

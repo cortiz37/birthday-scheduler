@@ -55,7 +55,7 @@ class BirthdaySchedulerCliRunnerTest {
         verify(schedulerService).processBirthdays();
         verify(applicationContext, never()).close();
         assertThat(output.toString(StandardCharsets.UTF_8))
-                .contains("Birthday emails processed for 2026-11-25.")
+                .contains("Birthday notifications processed for 2026-11-25.")
                 .contains("Birthday scheduler is running. Press Ctrl+C to exit.");
     }
 
@@ -74,14 +74,14 @@ class BirthdaySchedulerCliRunnerTest {
         runner.run(new DefaultApplicationArguments());
 
         assertThat(output.toString(StandardCharsets.UTF_8))
-                .contains("Birthday emails already processed for 2026-11-25; skipping.");
+                .contains("Birthday notifications already processed for 2026-11-25; skipping.");
     }
 
     @Test
     void listsFriendsAndClosesContextWhenListOptionIsProvided() {
         ByteArrayOutputStream output = new ByteArrayOutputStream();
         when(friendRepository.findAll()).thenReturn(List.of(
-                new Friend(1L, "Alice", "Johnson", LocalDate.of(1992, 3, 15), "alice@example.com")
+                new Friend(1L, "Alice", "Johnson", LocalDate.of(1992, 3, 15), "alice@example.com", "+15550000001")
         ));
         BirthdaySchedulerCliRunner runner = new BirthdaySchedulerCliRunner(
                 schedulerService,
@@ -97,6 +97,7 @@ class BirthdaySchedulerCliRunnerTest {
         verify(applicationContext).close();
         assertThat(output.toString(StandardCharsets.UTF_8))
                 .contains("Friends (1):")
-                .contains("Alice Johnson");
+                .contains("Alice Johnson")
+                .contains("Phone: +15550000001");
     }
 }

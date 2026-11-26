@@ -35,20 +35,23 @@ class BirthdayReminderServiceTest {
     @Mock
     private JavaMailSender mailSender;
 
-    private Configuration freemarkerConfiguration;
+    @Mock
+    private TwilioSmsGateway smsGateway;
+
+    private MessageTemplateService messageTemplateService;
     private BirthdayReminderService service;
 
     @BeforeEach
     void setUp() {
-        freemarkerConfiguration = new Configuration(Configuration.VERSION_2_3_34);
+        Configuration freemarkerConfiguration = new Configuration(Configuration.VERSION_2_3_34);
         freemarkerConfiguration.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "/templates");
         freemarkerConfiguration.setDefaultEncoding("UTF-8");
 
+        messageTemplateService = new MessageTemplateService(freemarkerConfiguration);
         service = new BirthdayReminderService(
                 friendRepository,
-                mailSender,
-                freemarkerConfiguration,
-                "sender@example.com",
+                messageTemplateService,
+                List.of(new EmailNotificationChannel(mailSender, "sender@example.com")),
                 "Birthday Reminder",
                 "birthday-reminder-email.ftl"
         );
@@ -64,14 +67,13 @@ class BirthdayReminderServiceTest {
 
         BirthdayNotificationService notificationService = new BirthdayNotificationService(
                 friendRepository,
-                mailSender,
-                freemarkerConfiguration,
-                "sender@example.com",
+                messageTemplateService,
+                List.of(new EmailNotificationChannel(mailSender, "sender@example.com")),
                 "Happy birthday!",
                 "birthday-email.ftl"
         );
 
-        notificationService.sendBirthdayEmails(oct8);
+        notificationService.sendBirthdayNotifications(oct8);
         service.sendBirthdayReminders(oct8);
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
@@ -88,6 +90,33 @@ class BirthdayReminderServiceTest {
                 tuple("jane.smith@example.com", "Birthday Reminder", "Dear Jane,\nToday is John Doe's birthday.\nDon't forget to send him a message !"),
                 tuple("mary.ann@example.com", "Birthday Reminder", "Dear Mary,\nToday is John Doe's birthday.\nDon't forget to send him a message !"),
                 tuple("mary.ann@example.com", "Birthday Reminder", "Dear Mary,\nToday is Jane Smith's birthday.\nDon't forget to send him a message !")
+        );
+    }
+
+    @Test
+    void sendsBothEmailAndSmsRemindersAndSkipsMissingPhoneNumber() {
+        BirthdayReminderService multiChannelReminderService = new BirthdayReminderService(
+                friendRepository,
+                messageTemplateService,
+                List.of(
+                        new EmailNotificationChannel(mailSender, "sender@example.com"),
+                        new TwilioSmsNotificationChannel(smsGateway)
+                ),
+                "Birthday Reminder",
+                "birthday-reminder-email.ftl"
+        );
+        LocalDate oct8 = LocalDate.of(2026, 10, 8);
+        Friend john = new Friend(1L, "John", "Doe", LocalDate.of(1990, 10, 8), "john.doe@example.com", "+15550000001");
+        Friend jane = new Friend(2L, "Jane", "Smith", LocalDate.of(1992, 9, 11), "jane.smith@example.com", "+15550000002");
+        Friend mary = new Friend(3L, "Mary", "Ann", LocalDate.of(1995, 9, 11), "mary.ann@example.com", null);
+        when(friendRepository.findAll()).thenReturn(List.of(john, jane, mary));
+
+        multiChannelReminderService.sendBirthdayReminders(oct8);
+
+        verify(mailSender, times(2)).send(any(SimpleMailMessage.class));
+        verify(smsGateway, times(1)).sendSms(
+                "+15550000002",
+                "Dear Jane,\nToday is John Doe's birthday.\nDon't forget to send him a message !"
         );
     }
 
@@ -173,9 +202,8 @@ class BirthdayReminderServiceTest {
     void throwsWhenTemplateDoesNotExist() {
         BirthdayReminderService badTemplateService = new BirthdayReminderService(
                 friendRepository,
-                mailSender,
-                freemarkerConfiguration,
-                "sender@example.com",
+                messageTemplateService,
+                List.of(new EmailNotificationChannel(mailSender, "sender@example.com")),
                 "Birthday Reminder",
                 "non-existent.ftl"
         );
@@ -186,7 +214,7 @@ class BirthdayReminderServiceTest {
 
         assertThatThrownBy(() -> badTemplateService.sendBirthdayReminders(targetDate))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Failed to render email template 'non-existent.ftl'");
+                .hasMessageContaining("Failed to render message template 'non-existent.ftl'");
     }
 
     @Test
