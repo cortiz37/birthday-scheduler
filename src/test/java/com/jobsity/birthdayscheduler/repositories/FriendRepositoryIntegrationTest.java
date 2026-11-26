@@ -37,9 +37,10 @@ class FriendRepositoryIntegrationTest {
         List<Friend> friends = friendRepository.findAll();
 
         assertThat(friends)
-                .hasSize(3)
+                .hasSize(4)
                 .extracting(Friend::firstName, Friend::phoneNumber)
                 .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple("Emily", "+154557600001"),
                         org.assertj.core.groups.Tuple.tuple("Alice", "+15550000001"),
                         org.assertj.core.groups.Tuple.tuple("Bob", "+15550000002"),
                         org.assertj.core.groups.Tuple.tuple("Clara", "+15550000003")
@@ -78,14 +79,14 @@ class FriendRepositoryIntegrationTest {
         }
     }
 
-    //@Test
+    @Test
     void sendsBirthdayEmailForFeb29FriendOnFeb28EndToEnd() {
         notificationService.sendBirthdayNotifications(LocalDate.of(2026, 2, 28));
 
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
         verify(javaMailSender).send(captor.capture());
-        assertThat(captor.getValue().getTo()).containsExactly("alice.johnson@example.com");
+        assertThat(captor.getValue().getTo()).containsExactly("emily.pier@example.com");
         assertThat(captor.getValue().getSubject()).isEqualTo("Happy birthday!");
-        assertThat(captor.getValue().getText()).isEqualTo("Happy birthday, dear Alice!");
+        assertThat(captor.getValue().getText()).isEqualTo("Happy birthday, dear Emily!");
     }
 }

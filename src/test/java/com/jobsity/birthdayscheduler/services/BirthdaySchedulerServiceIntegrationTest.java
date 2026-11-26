@@ -49,16 +49,17 @@ class BirthdaySchedulerServiceIntegrationTest {
 
     @Test
     void startupRunnerMarksDayProcessedSoSubsequentScheduledTriggerDoesNotResend() {
-        // BirthdaySchedulerCliRunner already ran on startup for 2026-03-15 (1 notification + 2 reminders)
+        // BirthdaySchedulerCliRunner already ran on startup for 2026-03-15 (1 notification + 3 reminders)
         assertThat(jobRunRepository.hasRunOn(LocalDate.of(2026, 3, 15))).isTrue();
         ArgumentCaptor<SimpleMailMessage> captor = ArgumentCaptor.forClass(SimpleMailMessage.class);
-        verify(javaMailSender, times(3)).send(captor.capture());
+        verify(javaMailSender, times(4)).send(captor.capture());
 
         assertThat(captor.getAllValues()).extracting(
                 msg -> msg.getTo()[0],
                 SimpleMailMessage::getSubject
         ).containsExactlyInAnyOrder(
                 tuple("alice.johnson@example.com", "Happy birthday!"),
+                tuple("emily.pier@example.com", "Birthday Reminder"),
                 tuple("bob.smith@example.com", "Birthday Reminder"),
                 tuple("clara.martinez@example.com", "Birthday Reminder")
         );
@@ -66,6 +67,6 @@ class BirthdaySchedulerServiceIntegrationTest {
         // Scheduled trigger later on the same day must skip sending again
         schedulerService.processScheduledBirthdays();
 
-        verify(javaMailSender, times(3)).send(any(SimpleMailMessage.class));
+        verify(javaMailSender, times(4)).send(any(SimpleMailMessage.class));
     }
 }
