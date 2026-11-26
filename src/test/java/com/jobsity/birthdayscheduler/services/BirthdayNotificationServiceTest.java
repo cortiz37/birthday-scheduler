@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -115,5 +116,25 @@ class BirthdayNotificationServiceTest {
         service.sendBirthdayEmails(targetDate);
 
         verify(mailSender, times(2)).send(any(SimpleMailMessage.class));
+    }
+
+    @Test
+    void sendsNoEmailsWhenNoFriendsCelebrateOnTargetDate() {
+        LocalDate targetDate = LocalDate.of(2026, 1, 1);
+        Friend alice = new Friend(1L, "Alice", "Johnson", LocalDate.of(1992, 3, 15), "alice@example.com");
+        when(friendRepository.findAll()).thenReturn(List.of(alice));
+
+        service.sendBirthdayEmails(targetDate);
+
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
+    }
+
+    @Test
+    void sendsNoEmailsWhenRepositoryIsEmpty() {
+        when(friendRepository.findAll()).thenReturn(List.of());
+
+        service.sendBirthdayEmails(LocalDate.of(2026, 3, 15));
+
+        verify(mailSender, never()).send(any(SimpleMailMessage.class));
     }
 }
