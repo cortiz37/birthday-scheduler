@@ -78,9 +78,26 @@ class FriendRepositoryConfigurationTest {
     }
 
     @Test
-    void failsContextStartupForUnsupportedSourceOrMissingFile() {
+    void normalizesSourceNameCaseAndWhitespace() {
+        contextRunner
+                .withPropertyValues("app.friends.source= FILE ")
+                .run(context -> {
+                    assertThat(context).hasSingleBean(CsvFriendRepository.class);
+                    assertThat(context).doesNotHaveBean(SqliteFriendRepository.class);
+                });
+    }
+
+    @Test
+    void failsContextStartupForUnsupportedSourceBlankLocationOrMissingFile() {
         contextRunner
                 .withPropertyValues("app.friends.source=unknown")
+                .run(context -> assertThat(context).hasFailed());
+
+        contextRunner
+                .withPropertyValues(
+                        "app.friends.source=file",
+                        "app.friends.file-location=   "
+                )
                 .run(context -> assertThat(context).hasFailed());
 
         contextRunner

@@ -371,4 +371,30 @@ Here is the updated implementation plan incorporating your decisions and notes (
 
 ---
 
+### Prompt #7:
 
+check the new scv reader i added to support friend data from a file, add the unis tests for the new components, i just added an integration test to veriufy all is ok. Add more coverage here
+
+### Response #7:
+
+I reviewed your CSV reader changes in commit `231c0a63` (`csv support.`) and found and fixed a bug in `CsvFriendRepository`, then added unit, configuration, and integration test coverage.
+
+### Findings & Fix in `CsvFriendRepository`
+- **Bug fixed — shared `0L` IDs broke reminders and tests**: [CsvFriendRepository.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/repositories/CsvFriendRepository.java#L83-L90) previously constructed every `Friend` with `0L` as `id`. Because [BirthdayReminderService.isSameFriend](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/java/com/jobsity/birthdayscheduler/services/BirthdayReminderService.java#L73-L78) compares non-null IDs with `Objects.equals(first.id(), second.id())`, every friend matched every other friend and no birthday reminders would be sent for CSV-backed friends. It also caused `FriendRepositoryConfigurationTest.loadsCsvFromCustomFileUriAndPlainFilesystemPath` (which expects `1L`) to fail. Updated `findAll()` / `mapRecord()` to assign sequential 1-based IDs (`1L, 2L, ...`).
+- **Header & BOM safeguards restored**: Added `validateRequiredHeaders` (`first_name`, `last_name`, `date_of_birth`, `email`) so header-only or missing-column files report the missing header clearly, and `openUtf8Reader` to strip a leading UTF-8 BOM (`\uFEFF`) before parsing headers.
+
+### Added Test Coverage
+- [CsvFriendRepositoryTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/repositories/CsvFriendRepositoryTest.java) (8 unit tests):
+  - Parses [friends.txt](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/main/resources/friends.txt) including Alice's `1992-02-29` DOB and Bob's omitted 5th column (`phone_number = null`).
+  - Handles UTF-8 BOM, quoted fields with commas/apostrophes, case-insensitive headers, blank `phone_number`, reordered columns, and CSVs without a `phone_number` header.
+  - Handles empty/header-only CSVs and re-reads modified external files on subsequent `findAll()` calls.
+  - Validates error handling for `null`/missing resources, missing required headers, missing/blank field values, invalid `date_of_birth`, and `IOException` wrapped as `UncheckedIOException`.
+- [FriendRepositoryConfigurationTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/repositories/FriendRepositoryConfigurationTest.java) (5 tests total, +1 added):
+  - Added coverage for trimmed/case-insensitive `app.friends.source` (`" FILE "`) and startup failure when `app.friends.file-location` is blank.
+- [CsvFriendSourceIntegrationTest.java](file:///Users/carlospupo/Documents/Data/jobsity/birthday-scheduler/src/test/java/com/jobsity/birthdayscheduler/repositories/CsvFriendSourceIntegrationTest.java) (1 integration test):
+  - Boots `@SpringBootTest` with `app.friends.source=file` and `app.friends.file-location=classpath:friends.txt` on `2026-02-28`, verifying friends are loaded from CSV (Alice receives `"Happy birthday!"`, Bob and Charlie receive `"Birthday Reminder"`) while daily execution tracking remains backed by `SqliteBirthdayJobRunRepository` and skips duplicate runs on the same day.
+
+### Verification
+Ran `./gradlew test --rerun-tasks` after the final edits: all **70 tests across 18 test suites passed** (0 failures, 0 errors, 0 skipped).
+
+---

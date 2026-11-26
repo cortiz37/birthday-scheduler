@@ -25,6 +25,13 @@ public class CsvFriendRepository implements FriendRepository {
     private static final String HEADER_EMAIL = "email";
     private static final String HEADER_PHONE_NUMBER = "phone_number";
 
+    private static final List<String> REQUIRED_HEADERS = List.of(
+            HEADER_FIRST_NAME,
+            HEADER_LAST_NAME,
+            HEADER_DATE_OF_BIRTH,
+            HEADER_EMAIL
+    );
+
     private static final CSVFormat CSV_FORMAT = CSVFormat.DEFAULT.builder()
             .setHeader()
             .setSkipHeaderRecord(true)
@@ -48,15 +55,18 @@ public class CsvFriendRepository implements FriendRepository {
 
     @Override
     public List<Friend> findAll() {
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8)); CSVParser parser = CSV_FORMAT.parse(reader)) {
+        try (BufferedReader reader = openUtf8Reader();
+             CSVParser parser = CSV_FORMAT.parse(reader)) {
             Map<String, Integer> headerMap = parser.getHeaderMap();
             if (headerMap == null || headerMap.isEmpty()) {
                 return List.of();
             }
+            validateRequiredHeaders(headerMap);
 
             List<Friend> friends = new ArrayList<>();
+            long rowId = 1L;
             for (CSVRecord record : parser) {
-                friends.add(mapRecord(record));
+                friends.add(mapRecord(record, rowId++));
             }
             return List.copyOf(friends);
         } catch (IOException ex) {
@@ -64,13 +74,33 @@ public class CsvFriendRepository implements FriendRepository {
         }
     }
 
-    private Friend mapRecord(CSVRecord record) {
+    private BufferedReader openUtf8Reader() throws IOException {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(resource.getInputStream(), StandardCharsets.UTF_8));
+        reader.mark(1);
+        int firstChar = reader.read();
+        if (firstChar != -1 && firstChar != '\uFEFF') {
+            reader.reset();
+        }
+        return reader;
+    }
+
+    private void validateRequiredHeaders(Map<String, Integer> headerMap) {
+        for (String requiredHeader : REQUIRED_HEADERS) {
+            if (!headerMap.containsKey(requiredHeader)) {
+                throw new IllegalStateException(
+                        "Missing required CSV header '" + requiredHeader + "' in " + resource.getDescription()
+                );
+            }
+        }
+    }
+
+    private Friend mapRecord(CSVRecord record, long rowId) {
         String firstName = requireValue(record, HEADER_FIRST_NAME);
         String lastName = requireValue(record, HEADER_LAST_NAME);
         LocalDate dateOfBirth = parseDate(record, requireValue(record, HEADER_DATE_OF_BIRTH));
         String email = requireValue(record, HEADER_EMAIL);
         String phoneNumber = optionalValue(record, HEADER_PHONE_NUMBER);
-        return new Friend(0L, firstName, lastName, dateOfBirth, email, phoneNumber);
+        return new Friend(rowId, firstName, lastName, dateOfBirth, email, phoneNumber);
     }
 
     private String requireValue(CSVRecord record, String column) {
